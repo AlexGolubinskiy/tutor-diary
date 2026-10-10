@@ -133,7 +133,6 @@ tbody tr:nth-child(5n) { background:var(--lav); }
   <label>Дата: <input id="datePick" type="date"></label>
   <button id="exportBtn">Экспорт</button>
   <button id="importBtn">Импорт</button>
-  <button id="clearWeek">Очистить неделю</button>
   <input id="importFile" type="file" accept="application/json" hidden>
 </header>
 
@@ -308,9 +307,59 @@ function saveAll(all) {
   if (storageBroken) return;
   localStorage.setItem(STORE, JSON.stringify(all));
 }
+// Ближайшая предыдущая неделя, в которой есть хотя бы одно занятие (до 52 недель назад).
+function scheduleTemplate(all, start) {
+  const d = new Date(start);
+  for (let i = 1; i <= 52; i++) {
+    d.setDate(d.getDate() - 7);
+    const w = all[weekKey(d)];
+    if (w && !w.noCopy && Array.isArray(w.days) &&
+        w.days.some(day => day.rows.some(r => r.student || r.time || r.isGroup))) {
+      return w;
+    }
+  }
+  return null;
+}
+
+// Копирует только расписание: время, ученика, группы и состав. Посещаемость и оплаты не переносятся.
+function copySchedule(source) {
+  return {days: source.days.map(day => {
+    const rows = [];
+    const keptParents = new Set();
+    for (const r of day.rows) {
+      if (!r.groupId && (r.student || r.time || r.isGroup)) {
+        const copy = newRow({time: r.time, student: r.student, isGroup: !!r.isGroup,
+          tariffKop: r.tariffKop, collapsed: !!r.collapsed});
+        keptParents.add(r.id);
+        rows.push({src: r.id, row: copy});
+      }
+    }
+    const out = [];
+    for (const item of rows) {
+      out.push(item.row);
+      if (item.row.isGroup) {
+        for (const m of day.rows) {
+          if (m.groupId === item.src && keptParents.has(m.groupId)) {
+            out.push(newRow({student: m.student, groupId: item.row.id}));
+          }
+        }
+      }
+    }
+    return {rows: out};
+  })};
+}
+
 function getWeekData() {
   const all = loadAll();
   const key = weekKey(weekStart);
+  const existing = all[key];
+  const isEmpty = !existing || existing.days.every(day =>
+    day.rows.every(r => !r.student && !r.time && !r.isGroup));
+  if (isEmpty && !(existing && existing.noCopy)) {
+    const template = scheduleTemplate(all, weekStart);
+    if (template) all[key] = copySchedule(template);
+    else if (!existing) all[key] = emptyWeek();
+  }
   if (!all[key]) all[key] = emptyWeek();
   for (const day of all[key].days) {
     if (!day.rows.length) day.rows = Array.from({length: 5}, () => newRow());
@@ -701,14 +750,6 @@ document.getElementById("importBtn").onclick = () => document.getElementById("im
 document.getElementById("importFile").onchange = e => {
   if (e.target.files[0]) importBackup(e.target.files[0]);
   e.target.value = "";
-};
-document.getElementById("clearWeek").onclick = () => {
-  if (storageBroken) return;
-  if (!confirm("Удалить все занятия этой недели из этого браузера? Отменить нельзя. Сначала нажмите «Экспорт», если нужна копия.")) return;
-  const all = loadAll();
-  delete all[weekKey(weekStart)];
-  saveAll(all);
-  render();
 };
 
 datePick.value = localISO(monday(new Date()));
