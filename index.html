@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Дневник</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-180.png">
+<meta name="theme-color" content="#2e6e54">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Дневник">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+:root {
+  --paper:#fffef8; --ink:#34362f; --line:#c8c5b9;
+  --green:#e6f1df; --blue:#e4edf5; --yellow:#faf0d3;
+  --pink:#f7e7e1; --lav:#eceaf5;
+}
+* { box-sizing:border-box; }
+body {
+  margin:0; background:#e9e6de; color:var(--ink);
+  font-family:Arial,sans-serif;
+}
+.toolbar {
+  display:flex; flex-wrap:wrap; align-items:center;
+  justify-content:center; gap:7px; padding:8px;
+  background:#fff; border-bottom:1px solid var(--line);
+}
+.toolbar h1 { width:100%; margin:0; text-align:center; font-size:17px; }
+button,input { font:inherit; }
+.toolbar button,.toolbar input {
+  padding:5px 8px; border:1px solid #bbb8ad;
+  border-radius:3px; background:white; font-size:12px;
+}
+#weekLabel { min-width:170px; text-align:center; font-size:12px; }
+.viewport { padding:7px; overflow-x:auto; }
+.book {
+  width:100%; min-width:780px; max-width:1800px; margin:auto;
+  display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  background:var(--paper); border:1px solid #bcb8ac;
+  box-shadow:0 3px 12px #00000010; overflow:hidden;
+}
+.page { min-width:0; padding:7px; background:var(--paper); }
+.page:first-child { border-right:3px double #bcb8ac; }
+.day {
+  display:grid; grid-template-columns:25px minmax(0,1fr);
+  margin-bottom:7px; border:1px solid var(--line);
+}
+.day-label {
+  display:flex; align-items:center; justify-content:center;
+  writing-mode:vertical-rl; transform:rotate(180deg);
+  text-align:center; font-size:10px; font-weight:bold;
+  padding:4px 1px; border-right:1px solid var(--line);
+}
+.day-content { min-width:0; }
+.date-line {
+  padding:4px; text-align:center; font-size:11px;
+  border-bottom:1px solid var(--line);
+}
+table { width:100%; table-layout:fixed; border-collapse:collapse; font-size:12px; }
+th,td { border-right:1px solid var(--line); border-bottom:1px solid #d4d1c7; }
+th:last-child,td:last-child { border-right:0; }
+th { padding:4px 2px; background:#e8ebed; font-size:11px; }
+th:nth-child(1) { width:19%; }
+th:nth-child(2) { width:39%; }
+th:nth-child(3) { width:12%; }
+th:nth-child(4) { width:30%; }
+td { height:29px; padding:0; overflow-wrap:anywhere; }
+td.edit, span.edit { padding:4px 3px; outline:none; }
+td.edit:focus, span.edit:focus { box-shadow:inset 0 0 0 2px #718e76; background:#fff!important; }
+tbody tr:nth-child(5n+1) { background:var(--green); }
+tbody tr:nth-child(5n+2) { background:var(--yellow); }
+tbody tr:nth-child(5n+3) { background:var(--blue); }
+tbody tr:nth-child(5n+4) { background:var(--pink); }
+tbody tr:nth-child(5n) { background:var(--lav); }
+.att {
+  text-align:center; cursor:pointer; font-size:16px; font-weight:bold;
+  user-select:none;
+}
+.att[data-state="+"] { color:#21823b; }
+.att[data-state="−"] { color:#c62828; }
+.att[data-state="—"] { color:#77746b; }
+.pay { padding:3px 4px; cursor:pointer; font-size:11px; }
+.pay:hover { outline:1px solid #999; }
+.pay.group-total { cursor:default; font-weight:bold; }
+.pay.group-total:hover { outline:none; }
+.student-cell { padding:4px 3px; }
+.group-parent .name { font-weight:bold; }
+.group-toggle {
+  border:1px solid #c5c0b5; background:white; cursor:pointer;
+  font-size:10px; font-weight:bold; padding:1px 5px; margin-left:4px; border-radius:3px;
+}
+.tariff { font-size:10px; color:#5b5a51; font-weight:normal; }
+.add-member {
+  border:1px solid #c5c0b5; background:white; font-size:10px;
+  padding:1px 5px; margin-left:4px; cursor:pointer; border-radius:3px;
+}
+.del {
+  float:right; border:0; background:transparent; color:#8a877d;
+  cursor:pointer; font-size:14px; line-height:1; padding:0 2px;
+}
+.del:hover { color:#c62828; }
+.group-member td:first-child { background:#f0eee7; }
+.group-member .name { padding-left:12px; }
+.group-member .name:before { content:"↳ "; color:#77746b; }
+.group-member[hidden] { display:none!important; }
+.actions { display:flex; justify-content:center; gap:5px; padding:3px; }
+.actions button {
+  border:1px solid #c5c0b5; background:white;
+  padding:3px 7px; font-size:10px; cursor:pointer;
+}
+.status {
+  margin:6px auto; max-width:1200px; padding:5px 10px;
+  color:#5b5a51; font-size:11px; text-align:center;
+}
+@media(max-width:900px) {
+  .page { padding:4px; }
+  .day { grid-template-columns:20px minmax(0,1fr); }
+  .day-label { font-size:8px; }
+  table { font-size:10px; }
+  th { font-size:9px; }
+  td { height:27px; }
+}
+</style>
+</head>
+<body>
+<header class="toolbar">
+  <h1>Дневник для репетиторов</h1>
+  <button id="prev">← Неделя</button>
+  <span id="weekLabel"></span>
+  <button id="next">Следующая неделя →</button>
+  <label>Дата: <input id="datePick" type="date"></label>
+  <button id="exportBtn">Экспорт</button>
+  <button id="importBtn">Импорт</button>
+  <button id="clearWeek">Очистить неделю</button>
+  <input id="importFile" type="file" accept="application/json" hidden>
+</header>
+
+<div class="viewport">
+  <main class="book">
+    <section class="page" id="page1"></section>
+    <section class="page" id="page2"></section>
+  </main>
+</div>
+<div class="status" id="status"></div>
+
+<script>
+"use strict";
+
+const DAYS = ["ПОНЕДЕЛЬНИК","ВТОРНИК","СРЕДА","ЧЕТВЕРГ","ПЯТНИЦА","СУББОТА"];
+const DAY_COLORS = ["var(--green)","var(--blue)","var(--yellow)","var(--pink)","var(--green)","var(--lav)"];
+const MONTHS = ["января","февраля","марта","апреля","мая","июня",
+  "июля","августа","сентября","октября","ноября","декабря"];
+const STORE = "tutorDiaryV2";
+const LEGACY = "tutorDiaryV1";
+const MAX_ROWS = 30;
+
+const p1 = document.getElementById("page1");
+const p2 = document.getElementById("page2");
+const datePick = document.getElementById("datePick");
+const weekLabel = document.getElementById("weekLabel");
+const statusEl = document.getElementById("status");
+
+let weekStart = null;
+let dayRecords = [];
+let storageBroken = false;
+
+// PURE-START
+// Денежные суммы хранятся целыми копейками (kop). Внешний вид считается отсюда.
+const METHOD_LABEL = {cash:"нал.", bank:"безнал", advance:"аванс", none:""};
+const METHOD_NAME = {cash:"наличные", bank:"безнал", advance:"аванс", none:"не оплачено"};
+
+function parseRub(text) {
+  const s = String(text).trim().replace(/\s/g, "").replace(",", ".");
+  const m = s.match(/^(\d{1,9})(?:\.(\d{1,2}))?$/);
+  if (!m) return null;
+  return Number(m[1]) * 100 + Number(((m[2] || "") + "00").slice(0, 2));
+}
+
+function kopToInput(kop) {
+  const rub = Math.floor(kop / 100);
+  const cents = kop % 100;
+  return String(rub) + (cents ? "," + String(cents).padStart(2, "0") : "");
+}
+
+function fmtKop(kop) {
+  const rub = Math.floor(kop / 100);
+  const cents = kop % 100;
+  const base = new Intl.NumberFormat("ru-RU").format(rub);
+  return base + (cents ? "," + String(cents).padStart(2, "0") : "") + " ₽";
+}
+
+function normalizeTime(text) {
+  const t = String(text).trim();
+  if (t === "") return "";
+  const m = t.match(/^(\d{1,2})[.:-]?(\d{2})\s*[-–—]\s*(\d{1,2})[.:-]?(\d{2})$/);
+  if (!m) return null;
+  const h1 = Number(m[1]), m1 = Number(m[2]), h2 = Number(m[3]), m2 = Number(m[4]);
+  if (h1 > 23 || h2 > 23 || m1 > 59 || m2 > 59) return null;
+  if (h2 * 60 + m2 <= h1 * 60 + m1) return null;
+  const pad = n => String(n).padStart(2, "0");
+  return `${pad(h1)}.${pad(m1)}-${pad(h2)}.${pad(m2)}`;
+}
+
+function parseMethod(text) {
+  const c = String(text).trim().toLowerCase();
+  if (c === "" || c.includes("наличн") || c === "нал") return "cash";
+  if (c.includes("аванс")) return "advance";
+  if (c.includes("безнал") || c.includes("банк") || c.includes("перевод")) return "bank";
+  if (c.includes("не опла") || c === "долг") return "none";
+  return null;
+}
+
+function paymentText(p) {
+  if (!p || p.method === "none") return "";
+  const label = METHOD_LABEL[p.method];
+  return fmtKop(p.amountKop) + (label ? " · " + label : "");
+}
+
+function groupSummary(members, tariffKop) {
+  let paidKop = 0;
+  let advanceKop = 0;
+  for (const m of members) {
+    const k = m.payment.amountKop;
+    if (m.payment.method === "advance") advanceKop += k;
+    else if (m.payment.method === "cash" || m.payment.method === "bank") paidKop += k;
+  }
+  // Правило C: отсутствовавший («−») не получает начисления, поэтому в ожидаемую сумму не входит.
+  const charged = members.filter(m => m.attendance !== "−").length;
+  const expectedKop = tariffKop == null ? null : tariffKop * charged;
+  return {paidKop, advanceKop, expectedKop};
+}
+// PURE-END
+
+function localISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function monday(d) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
+}
+function weekKey(d) { return localISO(d); }
+function emptyWeek() {
+  return {days: Array.from({length: 6}, () => ({rows: []}))};
+}
+function newId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+function newRow(extra) {
+  return Object.assign({
+    id: newId(), time: "", student: "", attendance: "—",
+    payment: {amountKop: 0, method: "none"},
+    isGroup: false, groupId: null, tariffKop: null, collapsed: false,
+  }, extra || {});
+}
+function normalizeRow(r) {
+  const pay = r.payment || {};
+  let method = pay.method || "none";
+  if (!Object.prototype.hasOwnProperty.call(METHOD_LABEL, method)) method = "none";
+  let amountKop = 0;
+  if (method !== "none") {
+    if (Number.isSafeInteger(pay.amountKop)) {
+      amountKop = pay.amountKop;
+    } else {
+      // Миграция из V1: там сумма хранилась в рублях.
+      amountKop = parseRub(String(pay.amount ?? 0)) ?? 0;
+    }
+  }
+  return {
+    id: r.id || newId(),
+    time: r.time || "",
+    student: r.student || "",
+    attendance: (r.attendance === "+" || r.attendance === "−") ? r.attendance : "—",
+    payment: {amountKop: method === "none" ? 0 : amountKop, method},
+    isGroup: !!(r.isGroup || r.groupCount),
+    groupId: r.groupId || null,
+    tariffKop: Number.isSafeInteger(r.tariffKop) ? r.tariffKop : null,
+    collapsed: !!r.collapsed,
+  };
+}
+function migrate(all) {
+  for (const key of Object.keys(all)) {
+    const week = all[key];
+    if (!week || !Array.isArray(week.days)) { delete all[key]; continue; }
+    week.days = Array.from({length: 6}, (_, i) => ({
+      rows: ((week.days[i] && week.days[i].rows) || []).map(normalizeRow),
+    }));
+  }
+  return all;
+}
+function loadAll() {
+  if (storageBroken) return {};
+  let raw = localStorage.getItem(STORE);
+  if (raw === null) raw = localStorage.getItem(LEGACY);
+  if (raw === null) return {};
+  try {
+    return migrate(JSON.parse(raw));
+  } catch (e) {
+    storageBroken = true;
+    alert("Сохранённые данные не читаются. Изменения отключены, чтобы не затереть их. Восстановите резервную копию через «Импорт».");
+    return {};
+  }
+}
+function saveAll(all) {
+  if (storageBroken) return;
+  localStorage.setItem(STORE, JSON.stringify(all));
+}
+function getWeekData() {
+  const all = loadAll();
+  const key = weekKey(weekStart);
+  if (!all[key]) all[key] = emptyWeek();
+  for (const day of all[key].days) {
+    if (!day.rows.length) day.rows = Array.from({length: 5}, () => newRow());
+  }
+  saveAll(all);
+  return all[key];
+}
+function persistDay(index) {
+  const all = loadAll();
+  const key = weekKey(weekStart);
+  if (!all[key]) all[key] = emptyWeek();
+  all[key].days[index].rows = dayRecords[index];
+  saveAll(all);
+}
+function setStatus(text) { statusEl.textContent = text; }
+
+function cleanupGroups(days) {
+  for (const day of days) {
+    const parents = new Set(day.rows.filter(r => r.isGroup).map(r => r.id));
+    for (const r of day.rows) {
+      if (r.groupId && !parents.has(r.groupId)) r.groupId = null;
+    }
+  }
+}
+
+function render() {
+  const picked = datePick.value ? new Date(datePick.value + "T12:00:00") : new Date();
+  weekStart = monday(picked);
+  datePick.value = localISO(weekStart);
+  const end = new Date(weekStart);
+  end.setDate(end.getDate() + 5);
+  weekLabel.textContent = `${weekStart.getDate()} ${MONTHS[weekStart.getMonth()]} — ${end.getDate()} ${MONTHS[end.getMonth()]} ${end.getFullYear()}`;
+
+  const data = getWeekData();
+  cleanupGroups(data.days);
+  dayRecords = data.days.map(d => d.rows);
+
+  p1.replaceChildren();
+  p2.replaceChildren();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    (i < 3 ? p1 : p2).append(makeDay(i, d));
+  }
+  setStatus(storageBroken
+    ? "Сохранение отключено: данные не читаются. Восстановите резервную копию через «Импорт»."
+    : "Данные сохраняются локально в этом браузере. Регулярно делайте резервную копию кнопкой «Экспорт».");
+}
+
+function makeDay(index, date) {
+  const section = document.createElement("section");
+  section.className = "day";
+  const label = document.createElement("div");
+  label.className = "day-label";
+  label.textContent = DAYS[index];
+  label.style.background = DAY_COLORS[index];
+  section.append(label);
+
+  const content = document.createElement("div");
+  content.className = "day-content";
+  const dateLine = document.createElement("div");
+  dateLine.className = "date-line";
+  dateLine.textContent = `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()} г.`;
+  content.append(dateLine);
+
+  const table = document.createElement("table");
+  table.innerHTML = "<thead><tr><th>Время</th><th>Ученик</th><th>+/−</th><th>Оплата</th></tr></thead>";
+  const tbody = document.createElement("tbody");
+  dayRecords[index].forEach(rec => tbody.append(makeRow(index, rec)));
+  table.append(tbody);
+  content.append(table);
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  const add = document.createElement("button");
+  add.textContent = "+ занятие";
+  add.onclick = () => {
+    if (dayRecords[index].length >= MAX_ROWS) {
+      alert(`Лимит: ${MAX_ROWS} строк в день.`);
+      return;
+    }
+    dayRecords[index].push(newRow());
+    persistDay(index);
+    render();
+  };
+  actions.append(add);
+  content.append(actions);
+  section.append(content);
+  return section;
+}
+
+function makeRow(dayIndex, rec) {
+  const rows = dayRecords[dayIndex];
+  const tr = document.createElement("tr");
+  tr.dataset.id = rec.id;
+  const member = !!rec.groupId;
+  if (member) {
+    tr.classList.add("group-member");
+    const parent = rows.find(r => r.id === rec.groupId);
+    tr.hidden = !!(parent && parent.collapsed);
+  }
+  if (rec.isGroup) tr.classList.add("group-parent");
+
+  // Время
+  const time = document.createElement("td");
+  if (!member) {
+    time.className = "edit";
+    time.contentEditable = "true";
+    time.spellcheck = false;
+    time.setAttribute("aria-label", "Время, формат 15.30-16.30");
+    time.textContent = rec.time;
+    time.addEventListener("blur", () => {
+      const norm = normalizeTime(time.textContent);
+      if (norm === null) {
+        alert("Введите время в формате 15.30-16.30");
+        time.textContent = rec.time;
+        return;
+      }
+      if (norm !== rec.time) {
+        rec.time = norm;
+        persistDay(dayIndex);
+      }
+      time.textContent = norm;
+    });
+  }
+  tr.append(time);
+
+  // Ученик / группа
+  const student = document.createElement("td");
+  student.className = "student-cell";
+  const name = document.createElement("span");
+  name.className = "edit name";
+  name.contentEditable = "true";
+  name.spellcheck = false;
+  name.setAttribute("aria-label", "Ученик или название группы");
+  name.textContent = rec.student;
+  name.addEventListener("blur", () => {
+    const text = name.textContent.trim();
+    const changed = text !== rec.student;
+    rec.student = text;
+    if (changed) persistDay(dayIndex);
+    if (!rec.isGroup && !member && /группа/i.test(text)) offerGroup(dayIndex, rec);
+  });
+  student.append(name);
+
+  if (rec.isGroup) {
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "group-toggle";
+    const memberCount = dayRecords[dayIndex].filter(r => r.groupId === rec.id).length;
+    toggle.textContent = rec.collapsed ? `▸ раскрыть (${memberCount})` : "▾ свернуть";
+    toggle.title = "Свернуть или раскрыть участников";
+    toggle.onclick = () => {
+      rec.collapsed = !rec.collapsed;
+      persistDay(dayIndex);
+      render();
+    };
+    student.append(toggle);
+    const plus = document.createElement("button");
+    plus.type = "button";
+    plus.className = "add-member";
+    plus.textContent = "+ уч.";
+    plus.title = "Добавить участника в группу";
+    plus.onclick = () => addMember(dayIndex, rec);
+    student.append(plus);
+    if (rec.tariffKop != null) {
+      const t = document.createElement("span");
+      t.className = "tariff";
+      t.textContent = ` · ${fmtKop(rec.tariffKop)} с человека`;
+      student.append(t);
+    }
+  }
+
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "del";
+  del.textContent = "×";
+  del.title = rec.isGroup ? "Удалить группу вместе с участниками" : "Удалить строку";
+  del.onclick = () => deleteRow(dayIndex, rec);
+  student.append(del);
+  tr.append(student);
+
+  // Посещаемость
+  const att = document.createElement("td");
+  att.className = "att";
+  if (rec.isGroup) {
+    const members = rows.filter(r => r.groupId === rec.id);
+    const present = members.filter(r => r.attendance === "+").length;
+    const absent = members.filter(r => r.attendance === "−").length;
+    att.textContent = `${present}/${members.length}`;
+    att.dataset.state = absent ? "−" : (members.length > 0 && present === members.length ? "+" : "—");
+  } else {
+    att.textContent = rec.attendance;
+    att.dataset.state = rec.attendance;
+    att.setAttribute("role", "button");
+    att.tabIndex = 0;
+    att.title = "Нажмите: пусто → + → − → пусто";
+    const cycle = () => {
+      const states = ["—", "+", "−"];
+      rec.attendance = states[(states.indexOf(rec.attendance) + 1) % states.length];
+      persistDay(dayIndex);
+      render();
+    };
+    att.addEventListener("click", cycle);
+    att.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        cycle();
+      }
+    });
+  }
+  tr.append(att);
+
+  // Оплата
+  const pay = document.createElement("td");
+  if (rec.isGroup) {
+    const members = rows.filter(r => r.groupId === rec.id);
+    const s = groupSummary(members, rec.tariffKop);
+    pay.className = "pay group-total";
+    let text = s.expectedKop != null
+      ? `оплачено ${fmtKop(s.paidKop)} из ${fmtKop(s.expectedKop)}`
+      : `оплачено ${fmtKop(s.paidKop)}`;
+    if (s.advanceKop) text += ` · аванс ${fmtKop(s.advanceKop)}`;
+    pay.textContent = text;
+    pay.title = "Сумма по участникам. Оплаты редактируются в строках участников.";
+  } else {
+    pay.className = "pay";
+    pay.textContent = paymentText(rec.payment);
+    pay.title = "Нажмите, чтобы указать сумму и способ оплаты";
+    pay.onclick = () => editPayment(dayIndex, rec);
+  }
+  tr.append(pay);
+
+  return tr;
+}
+
+function editPayment(dayIndex, rec) {
+  const raw = prompt("Сумма за занятие, ₽ (0 — если суммы нет):",
+    kopToInput(rec.payment.amountKop));
+  if (raw === null) return;
+  const kop = parseRub(raw);
+  if (kop === null) {
+    alert("Введите корректную сумму, например 800 или 800,50.");
+    return;
+  }
+  const current = rec.payment.method === "none" ? "не оплачено" : METHOD_NAME[rec.payment.method];
+  const choice = prompt("Способ: наличные / безнал / аванс / не оплачено", current);
+  if (choice === null) return;
+  const method = parseMethod(choice);
+  if (method === null) {
+    alert("Не понял способ оплаты. Введите: наличные, безнал, аванс или не оплачено.");
+    return;
+  }
+  if (method === "none") {
+    if (kop !== 0) alert("Занятие отмечено как не оплаченное, сумма сброшена до 0.");
+    rec.payment = {amountKop: 0, method: "none"};
+  } else {
+    rec.payment = {amountKop: kop, method};
+  }
+  persistDay(dayIndex);
+  render();
+}
+
+function offerGroup(dayIndex, rec) {
+  const raw = prompt("Сколько учеников в группе? (от 2 до 15)", "2");
+  if (raw === null) return;
+  const count = Number.parseInt(raw, 10);
+  if (!Number.isInteger(count) || count < 2 || count > 15) {
+    alert("Введите число от 2 до 15.");
+    return;
+  }
+  const tariffRaw = prompt("Стоимость занятия для одного участника, ₽ (можно оставить пустым):", "");
+  if (tariffRaw === null) return;
+  let tariffKop = null;
+  if (tariffRaw.trim() !== "") {
+    tariffKop = parseRub(tariffRaw);
+    if (tariffKop === null) {
+      alert("Введите корректную сумму, например 800.");
+      return;
+    }
+  }
+  const rows = dayRecords[dayIndex];
+  if (rows.length + count > MAX_ROWS) {
+    alert("Недостаточно места для участников группы.");
+    return;
+  }
+  rec.isGroup = true;
+  rec.tariffKop = tariffKop;
+  rec.attendance = "—";
+  rec.payment = {amountKop: 0, method: "none"};
+  const at = rows.indexOf(rec);
+  const members = Array.from({length: count}, () => newRow({groupId: rec.id}));
+  rows.splice(at + 1, 0, ...members);
+  persistDay(dayIndex);
+  render();
+}
+
+function addMember(dayIndex, parent) {
+  const rows = dayRecords[dayIndex];
+  const members = rows.filter(r => r.groupId === parent.id);
+  if (members.length >= 15) {
+    alert("В группе не больше 15 участников.");
+    return;
+  }
+  if (rows.length >= MAX_ROWS) {
+    alert(`Лимит: ${MAX_ROWS} строк в день.`);
+    return;
+  }
+  const anchor = members.length ? members[members.length - 1] : parent;
+  const newMember = newRow({groupId: parent.id});
+  rows.splice(rows.indexOf(anchor) + 1, 0, newMember);
+  parent.collapsed = false;
+  persistDay(dayIndex);
+  render();
+  const input = document.querySelector(`tr[data-id="${newMember.id}"] span.name`);
+  if (input) input.focus();
+}
+
+function deleteRow(dayIndex, rec) {
+  const rows = dayRecords[dayIndex];
+  const members = rec.isGroup ? rows.filter(r => r.groupId === rec.id) : [];
+  const label = rec.student || "без названия";
+  let what = rec.isGroup
+    ? `группу «${label}» и ${members.length} уч.`
+    : `строку «${label}»`;
+  const paidRows = [rec, ...members].filter(r => r.payment.method !== "none");
+  if (paidRows.length) what += ". Оплаты в этих строках тоже будут удалены";
+  if (!confirm(`Удалить ${what}? Отменить нельзя.`)) return;
+  dayRecords[dayIndex] = rows.filter(r => r.id !== rec.id && r.groupId !== rec.id);
+  persistDay(dayIndex);
+  render();
+}
+
+function exportBackup() {
+  if (storageBroken) {
+    alert("Данные не читаются, экспорт невозможен.");
+    return;
+  }
+  const payload = {app: "tutor-diary", version: 2, exportedAt: new Date().toISOString(), data: loadAll()};
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type: "application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `diary-backup-${localISO(new Date())}.json`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function importBackup(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(reader.result);
+    } catch (e) {
+      alert("Файл не читается как JSON.");
+      return;
+    }
+    if (!parsed || parsed.app !== "tutor-diary" || !parsed.data || typeof parsed.data !== "object") {
+      alert("Это не резервная копия дневника.");
+      return;
+    }
+    if (!confirm("Заменить все данные в этом браузере данными из копии?")) return;
+    storageBroken = false;
+    localStorage.setItem(STORE, JSON.stringify(migrate(parsed.data)));
+    render();
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById("prev").onclick = () => {
+  const d = new Date(weekStart);
+  d.setDate(d.getDate() - 7);
+  datePick.value = localISO(d);
+  render();
+};
+document.getElementById("next").onclick = () => {
+  const d = new Date(weekStart);
+  d.setDate(d.getDate() + 7);
+  datePick.value = localISO(d);
+  render();
+};
+datePick.onchange = render;
+document.getElementById("exportBtn").onclick = exportBackup;
+document.getElementById("importBtn").onclick = () => document.getElementById("importFile").click();
+document.getElementById("importFile").onchange = e => {
+  if (e.target.files[0]) importBackup(e.target.files[0]);
+  e.target.value = "";
+};
+document.getElementById("clearWeek").onclick = () => {
+  if (storageBroken) return;
+  if (!confirm("Удалить все занятия этой недели из этого браузера? Отменить нельзя. Сначала нажмите «Экспорт», если нужна копия.")) return;
+  const all = loadAll();
+  delete all[weekKey(weekStart)];
+  saveAll(all);
+  render();
+};
+
+datePick.value = localISO(monday(new Date()));
+render();
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>
