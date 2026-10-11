@@ -418,6 +418,7 @@ const KIND_ORDER = {TARIFF_SET: 0, LESSON_CONDUCTED: 1, LESSON_CANCELLED: 1,
   PAYMENT_RECEIVED: 2, ADVANCE_ALLOCATED: 3};
 let ledgerWarnings = [];
 let planHints = new Map();   // id строки -> подсказка «план» из аванса
+let fundedLessons = new Set(); // занятия, покрытые авансом (ключ — id занятия в журнале)
 
 function nameKey(name) {
   return String(name).replace(/\s+/g, " ").trim().toLowerCase().replace(/\|/g, "/");
@@ -545,6 +546,17 @@ function syncLedger(all, stored) {
   for (const evs of want.values()) for (const e of evs) unit(unitOf(e.logical)).want.push(e);
   for (const e of have) unit(unitOf(e.logical)).have.push(e);
 
+  // Авто-списание из аванса сохраняется, пока занятие проведено и не оплачено иначе.
+  for (const [uk, u] of units) {
+    const conducted = u.want.some(e => e.logical === `${uk}|L` && e.type === "LESSON_CONDUCTED");
+    const paid = u.want.some(e => e.logical === `${uk}|P`);
+    const manualF = u.want.some(e => e.logical === `${uk}|F`);
+    if (!conducted || paid || manualF) continue;
+    for (const h of u.have) {
+      if (h.auto && h.type === "ADVANCE_ALLOCATED") u.want.push(h);
+    }
+  }
+
   const errors = [];
   for (const [uk, u] of units) {
     if (sameGroup(u.have, u.want)) continue;
@@ -570,6 +582,37 @@ function syncLedger(all, stored) {
       errors.push({unit: uk, message: msg});
     }
   }
+  // Авто-списание: проведённое занятие без оплаты покрывается авансом, если остаток есть.
+  try {
+    const act = activeEvents(buildLedger(current).list());
+    const funded = new Set(act.filter(e => e.type === "ADVANCE_ALLOCATED").map(e => e.lesson_id));
+    const paid = new Set(act.filter(e => e.type === "PAYMENT_RECEIVED" && e.purpose === "lesson")
+      .map(e => e.lesson_id));
+    const lastAdv = new Map();
+    for (const e of act) {
+      if (e.type === "PAYMENT_RECEIVED" && e.purpose === "advance") {
+        if (!lastAdv.has(e.student_id) || e.date > lastAdv.get(e.student_id)) {
+          lastAdv.set(e.student_id, e.date);
+        }
+      }
+    }
+    const cands = act.filter(e => e.type === "LESSON_CONDUCTED" && !funded.has(e.lesson_id)
+        && !paid.has(e.lesson_id) && lastAdv.has(e.student_id) && e.date >= lastAdv.get(e.student_id))
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    for (const c of cands) {
+      const trial = buildLedger(current);
+      try {
+        const v = trial.list().filter(x => x.logical === `${c.lesson_id}|F`).length;
+        trial.add({event_id: `${c.lesson_id}|F#${v}`, type: "ADVANCE_ALLOCATED",
+          student_id: c.student_id, lesson_id: c.lesson_id, logical: `${c.lesson_id}|F`, auto: true});
+        current = trial.list();
+      } catch (e) {
+        // остатка нет: занятие остаётся без авансового списания
+      }
+    }
+  } catch (e) {
+    // авто-списание не должно ломать сохранение остальных строк
+  }
   return {events: current, errors};
 }
 
@@ -577,11 +620,13 @@ function syncLedger(all, stored) {
 // Только показ, журнал не меняется. Остаток пишется на последнем покрытом занятии.
 function computePlanHints(all) {
   const hints = new Map();
+  fundedLessons = new Set();
   try {
     const events = loadLedgerEvents();
     if (!events) return hints;
     const L = buildLedger(events);
-    const today = localISO(new Date());
+    fundedLessons = new Set(activeEvents(L.list())
+      .filter(e => e.type === "ADVANCE_ALLOCATED").map(e => e.lesson_id));
     const lastPrepay = new Map();
     for (const e of events) {
       if (e.type === "PAYMENT_RECEIVED" && e.purpose === "advance") {
@@ -599,7 +644,7 @@ function computePlanHints(all) {
           if (r.isGroup) continue;
           const sk = nameKey(r.student || "");
           if (!sk || !lastPrepay.has(sk)) continue;
-          if (date < today || date < lastPrepay.get(sk)) continue;
+          if (date < lastPrepay.get(sk)) continue;
           if (r.attendance !== "—" || (r.payment && r.payment.method !== "none")) continue;
           if (!planned.has(sk)) planned.set(sk, []);
           planned.get(sk).push({id: r.id, key: date + (r.time || "")});
@@ -918,6 +963,9 @@ function makeRow(dayIndex, rec) {
     if (rec.payment.method === "none" && hint) {
       pay.textContent = hint;
       pay.classList.add("plan");
+    } else if (rec.payment.method === "none"
+        && fundedLessons.has(`${weekKey(weekStart)}|${dayIndex}|${rec.id}`)) {
+      pay.textContent = "из аванса";
     } else {
       pay.textContent = paymentText(rec.payment);
     }
