@@ -119,9 +119,11 @@ tbody tr:nth-child(5n) { background:var(--lav); }
 .pay-edit input { width:50%; min-width:0; font-size:11px; padding:2px; }
 .pay-edit select { width:50%; min-width:0; font-size:11px; padding:1px; }
 .tariff-in {
-  width:100%; margin-top:2px; font-size:10px; padding:1px 3px;
+  width:70px; flex:0 0 70px; margin:0; font-size:10px; padding:1px 3px;
   border:1px solid #d4d1c7; background:#fff; border-radius:2px;
 }
+.student-cell.has-price { display:flex; align-items:center; gap:3px; }
+.student-cell.has-price .name { flex:1 1 auto; min-width:0; }
 @media(max-width:900px) {
   .page { padding:4px; }
   .day { grid-template-columns:20px minmax(0,1fr); }
@@ -884,10 +886,11 @@ function makeRow(dayIndex, rec) {
   }
 
   if (!member) {
+    student.classList.add("has-price");
     const tIn = document.createElement("input");
     tIn.className = "tariff-in";
     tIn.inputMode = "decimal";
-    tIn.placeholder = "₽ за занятие";
+    tIn.placeholder = "₽/зан.";
     tIn.title = rec.isGroup ? "Стоимость занятия одного участника" : "Стоимость одного занятия";
     tIn.value = rec.tariffKop == null ? "" : kopToInput(rec.tariffKop);
     tIn.addEventListener("change", () => {
