@@ -886,7 +886,7 @@ function makeRow(dayIndex, rec) {
   }
 
   if (!member) {
-    student.classList.add("has-price");
+    if (!rec.isGroup) student.classList.add("has-price");
     const tIn = document.createElement("input");
     tIn.className = "tariff-in";
     tIn.inputMode = "decimal";

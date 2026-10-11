@@ -1,5 +1,5 @@
 // Offline cache for the diary app shell. Data lives in localStorage, not here.
-const CACHE = "diary-shell-v6";
+const CACHE = "diary-shell-v7";
 const SHELL = [
   "./",
   "./index.html",
