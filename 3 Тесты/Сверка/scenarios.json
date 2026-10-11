@@ -1,0 +1,478 @@
+{
+ "direct_payment": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c1",
+   "student_id": "s1",
+   "lesson_id": "L1",
+   "date": "2026-02-02"
+  },
+  {
+   "type": "PAYMENT_RECEIVED",
+   "event_id": "p1",
+   "student_id": "s1",
+   "purpose": "lesson",
+   "lesson_id": "L1",
+   "amount": 80000
+  }
+ ],
+ "advance_covers_3": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "PAYMENT_RECEIVED",
+   "event_id": "a1",
+   "student_id": "s1",
+   "purpose": "advance",
+   "amount": 240000,
+   "date": "2026-02-01"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c2",
+   "student_id": "s1",
+   "lesson_id": "L2",
+   "date": "2026-02-03"
+  },
+  {
+   "type": "ADVANCE_ALLOCATED",
+   "event_id": "f2",
+   "student_id": "s1",
+   "lesson_id": "L2"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c3",
+   "student_id": "s1",
+   "lesson_id": "L3",
+   "date": "2026-02-10"
+  },
+  {
+   "type": "ADVANCE_ALLOCATED",
+   "event_id": "f3",
+   "student_id": "s1",
+   "lesson_id": "L3"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c4",
+   "student_id": "s1",
+   "lesson_id": "L4",
+   "date": "2026-02-17"
+  },
+  {
+   "type": "ADVANCE_ALLOCATED",
+   "event_id": "f4",
+   "student_id": "s1",
+   "lesson_id": "L4"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c5",
+   "student_id": "s1",
+   "lesson_id": "L5",
+   "date": "2026-02-24"
+  }
+ ],
+ "locked_price_after_tariff_change": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "PAYMENT_RECEIVED",
+   "event_id": "a1",
+   "student_id": "s1",
+   "purpose": "advance",
+   "amount": 240000,
+   "date": "2026-02-01"
+  },
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t2",
+   "student_id": "s1",
+   "amount": 120000,
+   "effective_from": "2026-03-01"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c1",
+   "student_id": "s1",
+   "lesson_id": "L1",
+   "date": "2026-03-05"
+  },
+  {
+   "type": "ADVANCE_ALLOCATED",
+   "event_id": "f1",
+   "student_id": "s1",
+   "lesson_id": "L1"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c2",
+   "student_id": "s1",
+   "lesson_id": "L2",
+   "date": "2026-03-12"
+  },
+  {
+   "type": "ADVANCE_ALLOCATED",
+   "event_id": "f2",
+   "student_id": "s1",
+   "lesson_id": "L2"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c3",
+   "student_id": "s1",
+   "lesson_id": "L3",
+   "date": "2026-03-19"
+  },
+  {
+   "type": "ADVANCE_ALLOCATED",
+   "event_id": "f3",
+   "student_id": "s1",
+   "lesson_id": "L3"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c4",
+   "student_id": "s1",
+   "lesson_id": "L4",
+   "date": "2026-03-26"
+  }
+ ],
+ "advance_not_multiple": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "PAYMENT_RECEIVED",
+   "event_id": "a1",
+   "student_id": "s1",
+   "purpose": "advance",
+   "amount": 100000,
+   "date": "2026-02-01"
+  }
+ ],
+ "refund_rejected": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "REFUND_PAID",
+   "event_id": "r1",
+   "student_id": "s1"
+  }
+ ],
+ "reversal_of_lesson": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c1",
+   "student_id": "s1",
+   "lesson_id": "L1",
+   "date": "2026-02-02"
+  },
+  {
+   "type": "REVERSAL",
+   "event_id": "R1",
+   "student_id": "s1",
+   "reverses": "c1"
+  }
+ ],
+ "duplicate_identical_and_conflict": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 90000,
+   "effective_from": "2026-01-01"
+  }
+ ],
+ "amount_mismatch": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c1",
+   "student_id": "s1",
+   "lesson_id": "L1",
+   "date": "2026-02-02",
+   "amount": 70000
+  }
+ ],
+ "overpayment": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c1",
+   "student_id": "s1",
+   "lesson_id": "L1",
+   "date": "2026-02-02"
+  },
+  {
+   "type": "PAYMENT_RECEIVED",
+   "event_id": "p1",
+   "student_id": "s1",
+   "purpose": "lesson",
+   "lesson_id": "L1",
+   "amount": 80000
+  },
+  {
+   "type": "PAYMENT_RECEIVED",
+   "event_id": "p2",
+   "student_id": "s1",
+   "purpose": "lesson",
+   "lesson_id": "L1",
+   "amount": 10000
+  }
+ ],
+ "cancelled_with_payment": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "LESSON_CANCELLED",
+   "event_id": "x1",
+   "student_id": "s1",
+   "lesson_id": "L1"
+  },
+  {
+   "type": "PAYMENT_RECEIVED",
+   "event_id": "p1",
+   "student_id": "s1",
+   "purpose": "lesson",
+   "lesson_id": "L1",
+   "amount": 80000
+  }
+ ],
+ "two_tariffs_same_date": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t2",
+   "student_id": "s1",
+   "amount": 90000,
+   "effective_from": "2026-01-01"
+  }
+ ],
+ "advance_exhausted": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "PAYMENT_RECEIVED",
+   "event_id": "a1",
+   "student_id": "s1",
+   "purpose": "advance",
+   "amount": 80000,
+   "date": "2026-02-01"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c1",
+   "student_id": "s1",
+   "lesson_id": "L1",
+   "date": "2026-02-02"
+  },
+  {
+   "type": "ADVANCE_ALLOCATED",
+   "event_id": "f1",
+   "student_id": "s1",
+   "lesson_id": "L1"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c2",
+   "student_id": "s1",
+   "lesson_id": "L2",
+   "date": "2026-02-09"
+  },
+  {
+   "type": "ADVANCE_ALLOCATED",
+   "event_id": "f2",
+   "student_id": "s1",
+   "lesson_id": "L2"
+  }
+ ],
+ "payment_without_lesson": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "PAYMENT_RECEIVED",
+   "event_id": "p1",
+   "student_id": "s1",
+   "purpose": "lesson",
+   "lesson_id": "L9",
+   "amount": 80000
+  }
+ ],
+ "double_reversal": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c1",
+   "student_id": "s1",
+   "lesson_id": "L1",
+   "date": "2026-02-02"
+  },
+  {
+   "type": "REVERSAL",
+   "event_id": "R1",
+   "student_id": "s1",
+   "reverses": "c1"
+  },
+  {
+   "type": "REVERSAL",
+   "event_id": "R2",
+   "student_id": "s1",
+   "reverses": "c1"
+  }
+ ],
+ "lesson_before_tariff": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-03-01"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c1",
+   "student_id": "s1",
+   "lesson_id": "L1",
+   "date": "2026-02-02"
+  }
+ ],
+ "tail_then_cash": [
+  {
+   "type": "TARIFF_SET",
+   "event_id": "t1",
+   "student_id": "s1",
+   "amount": 80000,
+   "effective_from": "2026-01-01"
+  },
+  {
+   "type": "PAYMENT_RECEIVED",
+   "event_id": "a1",
+   "student_id": "s1",
+   "purpose": "advance",
+   "amount": 100000,
+   "date": "2026-02-01"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c1",
+   "student_id": "s1",
+   "lesson_id": "L1",
+   "date": "2026-02-03"
+  },
+  {
+   "type": "ADVANCE_ALLOCATED",
+   "event_id": "f1",
+   "student_id": "s1",
+   "lesson_id": "L1"
+  },
+  {
+   "type": "LESSON_CONDUCTED",
+   "event_id": "c2",
+   "student_id": "s1",
+   "lesson_id": "L2",
+   "date": "2026-02-10"
+  },
+  {
+   "type": "ADVANCE_ALLOCATED",
+   "event_id": "f2",
+   "student_id": "s1",
+   "lesson_id": "L2"
+  },
+  {
+   "type": "PAYMENT_RECEIVED",
+   "event_id": "p2",
+   "student_id": "s1",
+   "purpose": "lesson",
+   "lesson_id": "L2",
+   "amount": 60000
+  }
+ ]
+}
