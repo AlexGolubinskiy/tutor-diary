@@ -1164,19 +1164,50 @@ function importBackup(file) {
   reader.readAsText(file);
 }
 
+// Звук «перелистывания страницы» при смене недели (синтез, без аудиофайла).
+let audioCtx = null;
+function playPageTurn() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const rate = audioCtx.sampleRate;
+    const len = Math.floor(rate * 0.35);
+    const buf = audioCtx.createBuffer(1, len, rate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    }
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 2500;
+    filter.Q.value = 0.8;
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.35;
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    src.start();
+  } catch (e) {
+    // Звук не критичен: если устройство его не поддерживает, просто ничего не играем.
+  }
+}
 document.getElementById("prev").onclick = () => {
   const d = new Date(weekStart);
   d.setDate(d.getDate() - 7);
   datePick.value = localISO(d);
+  playPageTurn();
   render();
 };
 document.getElementById("next").onclick = () => {
   const d = new Date(weekStart);
   d.setDate(d.getDate() + 7);
   datePick.value = localISO(d);
+  playPageTurn();
   render();
 };
-datePick.onchange = render;
+datePick.onchange = () => { playPageTurn(); render(); };
 document.getElementById("exportBtn").onclick = exportBackup;
 document.getElementById("importBtn").onclick = () => document.getElementById("importFile").click();
 document.getElementById("importFile").onchange = e => {
