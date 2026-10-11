@@ -108,11 +108,9 @@
             const price = tariffAt(this._tariffs(studentId), n.date);
             if (price === null) throw new Error("No tariff in effect on the payment date");
             requireKop(n.amount, "amount");
-            if (n.amount === 0 || n.amount % price !== 0) {
-              throw new Error("Advance must equal a whole number of lessons at the tariff");
-            }
+            if (n.amount === 0) throw new Error("Advance must be positive");
             n.price = price;                 // цена, зафиксированная авансом
-            n.lessons = n.amount / price;
+            n.lessons = Math.floor(n.amount / price);
           } else {
             throw new Error("Payment purpose must be lesson or advance");
           }
@@ -241,15 +239,16 @@
             addSource(lid, "payment");
           } else {
             advanceReceipts += e.amount;
-            buckets.push({left: e.lessons, price: e.price});
+            buckets.push({balance: e.amount, price: e.price});
           }
         } else if (e.type === "ADVANCE_ALLOCATED") {
-          const bucket = buckets.find(b => b.left > 0);
-          if (!bucket) throw new Error("No prepaid lesson left to allocate");
-          bucket.left -= 1;
+          const bucket = buckets.find(b => b.balance > 0);
+          if (!bucket) throw new Error("No prepaid balance left to allocate");
+          const take = Math.min(bucket.balance, bucket.price);
+          bucket.balance -= take;
           if (funded.has(lid)) throw new Error(`Lesson ${lid} is already paid from the advance`);
-          funded.set(lid, bucket.price);
-          advanceValue += bucket.price;
+          funded.set(lid, {value: bucket.price, amount: take});
+          advanceValue += take;
           addSource(lid, "advance");
         }
       }
@@ -258,7 +257,7 @@
       for (const [lid, c] of conducted) {
         let value;
         if (funded.has(lid)) {
-          value = funded.get(lid);
+          value = funded.get(lid).value;
         } else {
           value = tariffAt(tariffs, c.day);
           if (value === null) throw new Error(`No tariff in effect for lesson ${lid}`);
@@ -266,11 +265,8 @@
             throw new Error(`Lesson ${lid} does not match the tariff in effect on its date`);
           }
         }
-        const paid = (paidDirect.get(lid) || 0) + (funded.get(lid) || 0);
+        const paid = (paidDirect.get(lid) || 0) + (funded.has(lid) ? funded.get(lid).amount : 0);
         if (paid > value) throw new Error(`Payments for lesson ${lid} exceed its value`);
-        if ((sources.get(lid) || new Set()).size > 1) {
-          throw new Error(`Lesson ${lid} is paid both by payment and by advance`);
-        }
         lessonValue += value;
         debt += value - paid;
         if (paid === value) lessonsPaid += 1;
@@ -286,7 +282,6 @@
       }
 
       const advanceBalance = advanceReceipts - advanceValue;
-      if (advanceBalance < 0) throw new Error("Advance allocations exceed the advance received");
 
       return {
         lesson_value: lessonValue,
@@ -295,7 +290,7 @@
         advance_receipts: advanceReceipts,
         advance_allocated: advanceValue,
         advance_balance: advanceBalance,
-        paid_lessons_left: buckets.reduce((s, b) => s + b.left, 0),
+        paid_lessons_left: buckets.reduce((s, b) => s + Math.floor(b.balance / b.price), 0),
         debt,
         lessons_conducted: conducted.size,
         lessons_cancelled: cancelled.size,

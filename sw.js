@@ -1,12 +1,13 @@
 // Offline cache for the diary app shell. Data lives in localStorage, not here.
-const CACHE = "diary-shell-v3";
+const CACHE = "diary-shell-v4";
 const SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
-  "./icons/apple-touch-180.png"
+  "./icons/apple-touch-180.png",
+  "./ledger.js"
 ];
 
 self.addEventListener("install", (event) => {

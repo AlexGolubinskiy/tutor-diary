@@ -114,6 +114,14 @@ tbody tr:nth-child(5n) { background:var(--lav); }
   margin:6px auto; max-width:1200px; padding:5px 10px;
   color:#5b5a51; font-size:11px; text-align:center;
 }
+.pay.plan { color:#5b5a51; font-style:italic; }
+.pay-edit { display:flex; gap:3px; }
+.pay-edit input { width:50%; min-width:0; font-size:11px; padding:2px; }
+.pay-edit select { width:50%; min-width:0; font-size:11px; padding:1px; }
+.tariff-in {
+  width:100%; margin-top:2px; font-size:10px; padding:1px 3px;
+  border:1px solid #d4d1c7; background:#fff; border-radius:2px;
+}
 @media(max-width:900px) {
   .page { padding:4px; }
   .day { grid-template-columns:20px minmax(0,1fr); }
@@ -144,6 +152,7 @@ tbody tr:nth-child(5n) { background:var(--lav); }
 </div>
 <div class="status" id="status"></div>
 
+<script src="ledger.js"></script>
 <script>
 "use strict";
 
@@ -167,8 +176,8 @@ let storageBroken = false;
 
 // PURE-START
 // Денежные суммы хранятся целыми копейками (kop). Внешний вид считается отсюда.
-const METHOD_LABEL = {cash:"нал.", bank:"безнал", advance:"аванс", none:""};
-const METHOD_NAME = {cash:"наличные", bank:"безнал", advance:"аванс", none:"не оплачено"};
+const METHOD_LABEL = {cash:"нал.", bank:"безнал", prepay:"аванс", fromadvance:"из аванса", none:""};
+const METHOD_NAME = {cash:"наличные", bank:"безнал", prepay:"аванс внесён", fromadvance:"из аванса", none:"не оплачено"};
 
 function parseRub(text) {
   const s = String(text).trim().replace(/\s/g, "").replace(",", ".");
@@ -205,7 +214,8 @@ function normalizeTime(text) {
 function parseMethod(text) {
   const c = String(text).trim().toLowerCase();
   if (c === "" || c.includes("наличн") || c === "нал") return "cash";
-  if (c.includes("аванс")) return "advance";
+  if (c.includes("из аванс")) return "fromadvance";
+  if (c.includes("аванс")) return "prepay";
   if (c.includes("безнал") || c.includes("банк") || c.includes("перевод")) return "bank";
   if (c.includes("не опла") || c === "долг") return "none";
   return null;
@@ -213,6 +223,7 @@ function parseMethod(text) {
 
 function paymentText(p) {
   if (!p || p.method === "none") return "";
+  if (p.method === "fromadvance") return "из аванса";
   const label = METHOD_LABEL[p.method];
   return fmtKop(p.amountKop) + (label ? " · " + label : "");
 }
@@ -222,7 +233,7 @@ function groupSummary(members, tariffKop) {
   let advanceKop = 0;
   for (const m of members) {
     const k = m.payment.amountKop;
-    if (m.payment.method === "advance") advanceKop += k;
+    if (m.payment.method === "prepay") advanceKop += k;
     else if (m.payment.method === "cash" || m.payment.method === "bank") paidKop += k;
   }
   // Правило C: отсутствовавший («−») не получает начисления, поэтому в ожидаемую сумму не входит.
@@ -258,6 +269,7 @@ function newRow(extra) {
 function normalizeRow(r) {
   const pay = r.payment || {};
   let method = pay.method || "none";
+  if (method === "advance") method = "prepay";   // старое название аванса
   if (!Object.prototype.hasOwnProperty.call(METHOD_LABEL, method)) method = "none";
   let amountKop = 0;
   if (method !== "none") {
@@ -371,8 +383,303 @@ function persistDay(index) {
   const all = loadAll();
   const key = weekKey(weekStart);
   if (!all[key]) all[key] = emptyWeek();
+  dayRecords[index] = sortDayRows(dayRecords[index]);
   all[key].days[index].rows = dayRecords[index];
+  const ok = commitDay(all, index);
+  render();                   // при ошибке это отменяет несохранённое изменение
+  return ok;
+}
+
+// Строки дня — в хронологическом порядке по времени. Группа идёт вместе с участниками.
+// Строки без времени — в конце, в исходном порядке.
+function sortDayRows(rows) {
+  const isMember = r => r.groupId && rows.some(x => x.id === r.groupId);
+  const byParent = new Map();
+  for (const r of rows) {
+    if (!isMember(r)) continue;
+    if (!byParent.has(r.groupId)) byParent.set(r.groupId, []);
+    byParent.get(r.groupId).push(r);
+  }
+  const blocks = rows.filter(r => !isMember(r))
+    .map(r => [r, ...(byParent.get(r.id) || [])]);
+  blocks.sort((a, b) => {
+    const ta = a[0].time || "", tb = b[0].time || "";
+    if (ta === tb) return 0;
+    if (ta === "") return 1;
+    if (tb === "") return -1;
+    return ta < tb ? -1 : 1;
+  });
+  return blocks.flat();
+}
+
+// ---------------------------------------------------------------- финансовый журнал
+const LEDGER_KEY = "tutorDiaryLedgerV1";
+const KIND_ORDER = {TARIFF_SET: 0, LESSON_CONDUCTED: 1, LESSON_CANCELLED: 1,
+  PAYMENT_RECEIVED: 2, ADVANCE_ALLOCATED: 3};
+let ledgerWarnings = [];
+let planHints = new Map();   // id строки -> подсказка «план» из аванса
+
+function nameKey(name) {
+  return String(name).replace(/\s+/g, " ").trim().toLowerCase().replace(/\|/g, "/");
+}
+function addDays(iso, n) {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function loadLedgerEvents() {
+  let raw;
+  try { raw = localStorage.getItem(LEDGER_KEY); } catch (e) { return null; }
+  if (raw === null) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v : null;
+  } catch (e) { return null; }
+}
+function saveLedgerEvents(events) {
+  localStorage.setItem(LEDGER_KEY, JSON.stringify(events));
+}
+function buildLedger(events) {
+  const L = new FinancialLedger();
+  for (const e of events) L.add(e);
+  return L;
+}
+// Единица пересчёта — строка таблицы: неделя|день|id строки.
+function unitOf(logical) {
+  return logical.split("|").slice(0, 3).join("|");
+}
+
+// Что должно быть в журнале по всем неделям: logical -> список событий.
+function desiredByLogical(all) {
+  const out = new Map();
+  const push = (logical, ev) => {
+    if (!out.has(logical)) out.set(logical, []);
+    out.get(logical).push(Object.assign({logical}, ev));
+  };
+  for (const wk of Object.keys(all)) {
+    const week = all[wk];
+    if (!week || !Array.isArray(week.days)) continue;
+    week.days.forEach((day, di) => {
+      const rows = day.rows || [];
+      const date = addDays(wk, di);
+      for (const r of rows) {
+        if (r.isGroup) continue;
+        const student = nameKey(r.student || "");
+        const parent = r.groupId ? rows.find(x => x.id === r.groupId) : null;
+        const owner = parent || r;                    // тариф группы — у строки группы
+        if (student && owner.tariffKop != null) {
+          push(`${wk}|${di}|${owner.id}|T|${student}`,
+            {type: "TARIFF_SET", student_id: student, amount: owner.tariffKop, effective_from: wk});
+        }
+        if (!student) continue;
+        const base = `${wk}|${di}|${r.id}`;
+        if (r.attendance === "+") {
+          push(`${base}|L`, {type: "LESSON_CONDUCTED", student_id: student, lesson_id: base, date});
+        } else if (r.attendance === "−") {
+          push(`${base}|L`, {type: "LESSON_CANCELLED", student_id: student, lesson_id: base});
+        }
+        const pay = r.payment || {};
+        if ((pay.method === "cash" || pay.method === "bank") && pay.amountKop > 0) {
+          push(`${base}|P`, {type: "PAYMENT_RECEIVED", purpose: "lesson", student_id: student,
+            lesson_id: base, amount: pay.amountKop});
+        }
+        if (pay.method === "prepay" && pay.amountKop > 0) {
+          push(`${base}|A`, {type: "PAYMENT_RECEIVED", purpose: "advance", student_id: student,
+            date, amount: pay.amountKop});
+        }
+        if (pay.method === "fromadvance") {
+          push(`${base}|F`, {type: "ADVANCE_ALLOCATED", student_id: student, lesson_id: base});
+        }
+      }
+    });
+  }
+  return out;
+}
+
+function activeEvents(list) {
+  const reversed = new Set(list.filter(e => e.type === "REVERSAL").map(e => e.reverses));
+  return list.filter(e => e.type !== "REVERSAL" && e.logical && !reversed.has(e.event_id));
+}
+function sig(e) {
+  const o = {type: e.type, student_id: e.student_id};
+  for (const k of ["lesson_id", "date", "purpose", "effective_from"]) {
+    if (e[k] !== undefined) o[k] = e[k];
+  }
+  if (e.type !== "LESSON_CONDUCTED" && e.type !== "ADVANCE_ALLOCATED") o.amount = e.amount;
+  return JSON.stringify(o);
+}
+function groupSig(events) {
+  const m = new Map();
+  for (const e of events) {
+    if (!m.has(e.logical)) m.set(e.logical, []);
+    m.get(e.logical).push(sig(e));
+  }
+  return m;
+}
+function sameGroup(have, want) {
+  const a = groupSig(have), b = groupSig(want);
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a) {
+    const w = b.get(k);
+    if (!w || w.join("\n") !== v.join("\n")) return false;
+  }
+  return true;
+}
+
+// Приводит журнал в соответствие с таблицей. Каждая строка применяется отдельно:
+// если правило нарушено, эта строка не учитывается, остальные применяются.
+function syncLedger(all, stored) {
+  let current;
+  try {
+    current = buildLedger(stored).list();
+  } catch (e) {
+    return {fatal: "Журнал финансов повреждён: " + e.message, events: stored, errors: []};
+  }
+  const want = desiredByLogical(all);
+  const have = activeEvents(current);
+  const units = new Map();
+  const unit = k => {
+    if (!units.has(k)) units.set(k, {want: [], have: []});
+    return units.get(k);
+  };
+  for (const evs of want.values()) for (const e of evs) unit(unitOf(e.logical)).want.push(e);
+  for (const e of have) unit(unitOf(e.logical)).have.push(e);
+
+  const errors = [];
+  for (const [uk, u] of units) {
+    if (sameGroup(u.have, u.want)) continue;
+    try {
+      const trial = buildLedger(current);
+      for (const e of u.have.slice().reverse()) {
+        trial.add({event_id: e.event_id + "~r", type: "REVERSAL",
+          student_id: e.student_id, reverses: e.event_id});
+      }
+      const adds = u.want.map((e, i) => ({e, i}))
+        .sort((a, b) => (KIND_ORDER[a.e.type] - KIND_ORDER[b.e.type]) || (a.i - b.i));
+      for (const {e} of adds) {
+        const v = trial.list().filter(x => x.logical === e.logical).length;
+        trial.add(Object.assign({}, e, {event_id: `${e.logical}#${v}`}));
+      }
+      current = trial.list();
+    } catch (err) {
+      let msg = err.message;
+      // Для отменённого занятия ошибка с оплатой без «+» означает: отмечено «−», но оплата есть.
+      if (u.want.some(e => e.type === "LESSON_CANCELLED") && /without a conducted/.test(msg)) {
+        msg = "cancelled but has payments";
+      }
+      errors.push({unit: uk, message: msg});
+    }
+  }
+  return {events: current, errors};
+}
+
+// Подсказки «план»: на какие ближайшие занятия ученика хватит аванса.
+// Только показ, журнал не меняется. Остаток пишется на последнем покрытом занятии.
+function computePlanHints(all) {
+  const hints = new Map();
+  try {
+    const events = loadLedgerEvents();
+    if (!events) return hints;
+    const L = buildLedger(events);
+    const today = localISO(new Date());
+    const lastPrepay = new Map();
+    for (const e of events) {
+      if (e.type === "PAYMENT_RECEIVED" && e.purpose === "advance") {
+        const cur = lastPrepay.get(e.student_id);
+        if (!cur || e.date > cur) lastPrepay.set(e.student_id, e.date);
+      }
+    }
+    const planned = new Map();
+    for (const wk of Object.keys(all)) {
+      const week = all[wk];
+      if (!week || !Array.isArray(week.days)) continue;
+      week.days.forEach((day, di) => {
+        const date = addDays(wk, di);
+        for (const r of day.rows) {
+          if (r.isGroup) continue;
+          const sk = nameKey(r.student || "");
+          if (!sk || !lastPrepay.has(sk)) continue;
+          if (date < today || date < lastPrepay.get(sk)) continue;
+          if (r.attendance !== "—" || (r.payment && r.payment.method !== "none")) continue;
+          if (!planned.has(sk)) planned.set(sk, []);
+          planned.get(sk).push({id: r.id, key: date + (r.time || "")});
+        }
+      });
+    }
+    for (const [sk, items] of planned) {
+      const s = L.summary(sk);
+      if (!s.tariff_current || s.advance_balance <= 0) continue;
+      let remaining = s.advance_balance;
+      const price = s.tariff_current;
+      items.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+      for (const it of items) {
+        if (remaining <= 0) break;
+        if (remaining >= price) {
+          hints.set(it.id, "из аванса");
+          remaining -= price;
+        } else {
+          hints.set(it.id, `аванс: осталось ${fmtKop(remaining)}, доплата ${fmtKop(price - remaining)}`);
+          remaining = 0;
+        }
+      }
+    }
+  } catch (e) {
+    return new Map();
+  }
+  return hints;
+}
+
+function ruError(msg) {
+  const rules = [
+    [/No tariff in effect/, "нет тарифа на эту дату, введите тариф в ячейке «Оплата»"],
+    
+    [/exceed its value/, "оплата больше стоимости занятия"],
+    [/cancelled but has payments/, "занятие отмечено «−», но оплата уже есть"],
+    [/No prepaid (lesson|balance) left/, "на аванса не осталось средств"],
+    [/without a conducted/, "оплата без отметки «+» за занятие"],
+    [/already paid from the advance/, "занятие уже оплачено из аванса"],
+    [/already has a conducted or cancelled/, "занятие уже отмечено"],
+    [/does not match the tariff/, "сумма занятия не совпадает с тарифом"],
+    [/Two tariffs have the same/, "у ученика уже есть тариф с этой датой"],
+    [/Advance allocations exceed/, "занятий из аванса больше, чем внесено"],
+  ];
+  for (const [re, text] of rules) if (re.test(msg)) return text;
+  return msg;
+}
+function describeError(all, e) {
+  const [wk, di, rid] = e.unit.split("|");
+  const week = all[wk];
+  const day = week && week.days[Number(di)];
+  const row = day ? day.rows.find(r => r.id === rid) : null;
+  const who = row ? (row.student || "без имени") : "удалённая строка";
+  const [, m, d] = addDays(wk, Number(di)).split("-");
+  return `${who} (${d}.${m}): ${ruError(e.message)}`;
+}
+
+function commitDay(all, index) {
+  if (storageBroken) return false;
+  const stored = loadLedgerEvents();
+  if (stored === null) {
+    alert("Журнал финансов не читается. Изменения отключены, чтобы не испортить данные.");
+    return false;
+  }
+  const res = syncLedger(all, stored);
+  if (res.fatal) {
+    alert(res.fatal);
+    return false;
+  }
+  const prefix = `${weekKey(weekStart)}|${index}|`;
+  const mine = res.errors.filter(e => e.unit.startsWith(prefix));
+  if (mine.length) {
+    alert("Изменение не сохранено:\n" +
+      mine.slice(0, 3).map(e => describeError(all, e)).join("\n") +
+      "\n\nИсправьте строку и попробуйте снова.");
+    return false;
+  }
+  ledgerWarnings = res.errors.map(e => describeError(all, e));
   saveAll(all);
+  saveLedgerEvents(res.events);
+  return true;
 }
 function setStatus(text) { statusEl.textContent = text; }
 
@@ -396,6 +703,7 @@ function render() {
   const data = getWeekData();
   cleanupGroups(data.days);
   dayRecords = data.days.map(d => d.rows);
+  planHints = computePlanHints(loadAll());
 
   p1.replaceChildren();
   p2.replaceChildren();
@@ -407,6 +715,9 @@ function render() {
   setStatus(storageBroken
     ? "Сохранение отключено: данные не читаются. Восстановите резервную копию через «Импорт»."
     : "Данные сохраняются локально в этом браузере. Регулярно делайте резервную копию кнопкой «Экспорт».");
+  if (ledgerWarnings.length) {
+    statusEl.textContent += " Внимание, не учтено в финансах: " + ledgerWarnings.join("; ");
+  }
 }
 
 function makeDay(index, date) {
@@ -525,12 +836,28 @@ function makeRow(dayIndex, rec) {
     plus.title = "Добавить участника в группу";
     plus.onclick = () => addMember(dayIndex, rec);
     student.append(plus);
-    if (rec.tariffKop != null) {
-      const t = document.createElement("span");
-      t.className = "tariff";
-      t.textContent = ` · ${fmtKop(rec.tariffKop)} с человека`;
-      student.append(t);
-    }
+  }
+
+  if (!member) {
+    const tIn = document.createElement("input");
+    tIn.className = "tariff-in";
+    tIn.inputMode = "decimal";
+    tIn.placeholder = "₽ за занятие";
+    tIn.title = rec.isGroup ? "Стоимость занятия одного участника" : "Стоимость одного занятия";
+    tIn.value = rec.tariffKop == null ? "" : kopToInput(rec.tariffKop);
+    tIn.addEventListener("change", () => {
+      const raw = tIn.value.trim();
+      const t = raw === "" ? null : parseRub(raw);
+      if (raw !== "" && (t === null || t === 0)) {
+        alert("Введите корректную стоимость, например 800.");
+        render();
+        return;
+      }
+      rec.tariffKop = t;
+      persistDay(dayIndex);
+      render();
+    });
+    student.append(tIn);
   }
 
   const del = document.createElement("button");
@@ -587,40 +914,80 @@ function makeRow(dayIndex, rec) {
     pay.title = "Сумма по участникам. Оплаты редактируются в строках участников.";
   } else {
     pay.className = "pay";
-    pay.textContent = paymentText(rec.payment);
+    const hint = planHints.get(rec.id);
+    if (rec.payment.method === "none" && hint) {
+      pay.textContent = hint;
+      pay.classList.add("plan");
+    } else {
+      pay.textContent = paymentText(rec.payment);
+    }
     pay.title = "Нажмите, чтобы указать сумму и способ оплаты";
-    pay.onclick = () => editPayment(dayIndex, rec);
+    pay.onclick = () => openPaymentEditor(dayIndex, rec, pay);
   }
   tr.append(pay);
 
   return tr;
 }
 
-function editPayment(dayIndex, rec) {
-  const raw = prompt("Сумма за занятие, ₽ (0 — если суммы нет):",
-    kopToInput(rec.payment.amountKop));
-  if (raw === null) return;
-  const kop = parseRub(raw);
-  if (kop === null) {
-    alert("Введите корректную сумму, например 800 или 800,50.");
-    return;
+// Оплата редактируется прямо в ячейке: сумма и способ. Сохранение — при уходе из ячейки или Enter.
+function openPaymentEditor(dayIndex, rec, cell) {
+  if (cell.querySelector(".pay-edit")) return;
+  let done = false;
+  const wrap = document.createElement("div");
+  wrap.className = "pay-edit";
+
+  const amount = document.createElement("input");
+  amount.type = "text";
+  amount.inputMode = "decimal";
+  amount.placeholder = "₽";
+  amount.value = (rec.payment.method === "none" || rec.payment.method === "fromadvance")
+    ? "" : kopToInput(rec.payment.amountKop);
+
+  const sel = document.createElement("select");
+  const options = [["none", "не оплачено"], ["cash", "наличные"], ["bank", "безнал"],
+    ["prepay", "аванс внесён"], ["fromadvance", "из аванса"]];
+  for (const [value, text] of options) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = text;
+    o.selected = value === rec.payment.method;
+    sel.append(o);
   }
-  const current = rec.payment.method === "none" ? "не оплачено" : METHOD_NAME[rec.payment.method];
-  const choice = prompt("Способ: наличные / безнал / аванс / не оплачено", current);
-  if (choice === null) return;
-  const method = parseMethod(choice);
-  if (method === null) {
-    alert("Не понял способ оплаты. Введите: наличные, безнал, аванс или не оплачено.");
-    return;
-  }
-  if (method === "none") {
-    if (kop !== 0) alert("Занятие отмечено как не оплаченное, сумма сброшена до 0.");
-    rec.payment = {amountKop: 0, method: "none"};
-  } else {
-    rec.payment = {amountKop: kop, method};
-  }
-  persistDay(dayIndex);
-  render();
+  wrap.append(amount, sel);
+  cell.replaceChildren(wrap);
+  amount.focus();
+
+  const commit = () => {
+    if (done) return;
+    done = true;
+    const kop = parseRub(amount.value.trim() === "" ? "0" : amount.value);
+    if (kop === null) {
+      alert("Введите корректную сумму, например 800 или 800,50.");
+      render();
+      return;
+    }
+    const method = sel.value;
+    rec.payment = (method === "none" || method === "fromadvance")
+      ? {amountKop: 0, method} : {amountKop: kop, method};
+    persistDay(dayIndex);
+    render();
+  };
+  const cancel = () => {
+    if (done) return;
+    done = true;
+    render();
+  };
+  amount.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); commit(); }
+    if (e.key === "Escape") cancel();
+  });
+  sel.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); commit(); }
+    if (e.key === "Escape") cancel();
+  });
+  wrap.addEventListener("focusout", e => {
+    if (!wrap.contains(e.relatedTarget)) commit();
+  });
 }
 
 function offerGroup(dayIndex, rec) {
@@ -698,7 +1065,8 @@ function exportBackup() {
     alert("Данные не читаются, экспорт невозможен.");
     return;
   }
-  const payload = {app: "tutor-diary", version: 2, exportedAt: new Date().toISOString(), data: loadAll()};
+  const payload = {app: "tutor-diary", version: 3, exportedAt: new Date().toISOString(),
+    data: loadAll(), ledger: loadLedgerEvents() || []};
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type: "application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -724,9 +1092,22 @@ function importBackup(file) {
       alert("Это не резервная копия дневника.");
       return;
     }
+    const all = migrate(parsed.data);
+    const ledgerIn = Array.isArray(parsed.ledger) ? parsed.ledger : [];
+    const res = syncLedger(all, ledgerIn);
+    if (res.fatal) {
+      alert(res.fatal);
+      return;
+    }
+    if (res.errors.length) {
+      alert("Копия не прошла финансовую проверку:\n" +
+        res.errors.slice(0, 3).map(e => describeError(all, e)).join("\n"));
+      return;
+    }
     if (!confirm("Заменить все данные в этом браузере данными из копии?")) return;
     storageBroken = false;
-    localStorage.setItem(STORE, JSON.stringify(migrate(parsed.data)));
+    localStorage.setItem(STORE, JSON.stringify(all));
+    saveLedgerEvents(res.events);
     render();
   };
   reader.readAsText(file);
